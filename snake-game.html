@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Işınlanan Yılan Oyunu</title>
+    <style>
+        body {
+            background-color: #1a1a2e;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+        }
+        
+        h1 {
+            color: #e94560;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px rgba(233, 69, 96, 0.5);
+        }
+        
+        #game-container {
+            position: relative;
+            width: 500px;
+            height: 500px;
+            background-color: #16213e;
+            border: 3px solid #0f3460;
+            border-radius: 5px;
+            box-shadow: 0 0 20px rgba(15, 52, 96, 0.5);
+        }
+        
+        #game-board {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #score-container {
+            display: flex;
+            justify-content: space-between;
+            width: 500px;
+            padding: 10px 0;
+        }
+        
+        .score-box {
+            background-color: #0f3460;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        
+        #score {
+            color: #e94560;
+        }
+        
+        #game-over {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(26, 26, 46, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            display: none;
+        }
+        
+        #game-over h2 {
+            color: #e94560;
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+        
+        #final-score {
+            font-size: 1.5rem;
+            margin-bottom: 30px;
+        }
+        
+        #restart-btn {
+            background-color: #e94560;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        #restart-btn:hover {
+            background-color: #c23252;
+            transform: scale(1.05);
+        }
+        
+        #controls {
+            margin-top: 20px;
+            text-align: center;
+            color: #93b5e1;
+        }
+        
+        .flash {
+            animation: flash-animation 0.5s;
+        }
+        
+        @keyframes flash-animation {
+            0% { background-color: #16213e; }
+            50% { background-color: #e94560; }
+            100% { background-color: #16213e; }
+        }
+    </style>
+</head>
+<body>
+    <h1>Işınlanan Yılan Oyunu</h1>
+    
+    <div id="score-container">
+        <div class="score-box">Skor: <span id="score">0</span></div>
+        <div class="score-box">En Yüksek Skor: <span id="high-score">0</span></div>
+    </div>
+    
+    <div id="game-container">
+        <canvas id="game-board"></canvas>
+        
+        <div id="game-over">
+            <h2>Oyun Bitti!</h2>
+            <div id="final-score">Skor: 0</div>
+            <button id="restart-btn">Tekrar Oyna</button>
+        </div>
+    </div>
+    
+    <div id="controls">
+        <p>Yön tuşları veya WASD ile yılanı hareket ettirin</p>
+        <p>Elma yediğinizde, hem yılan hem de elma rastgele ışınlanacak!</p>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('game-board');
+            const ctx = canvas.getContext('2d');
+            const gameContainer = document.getElementById('game-container');
+            const scoreElement = document.getElementById('score');
+            const highScoreElement = document.getElementById('high-score');
+            const gameOverScreen = document.getElementById('game-over');
+            const finalScoreElement = document.getElementById('final-score');
+            const restartBtn = document.getElementById('restart-btn');
+            
+            // Oyun ayarları
+            const gridSize = 20; // Her hücrenin boyutu
+            let gameWidth, gameHeight;
+            let gridWidth, gridHeight;
+            let snake = [];
+            let apple = {};
+            let dx = gridSize; // X ekseni yön (sağa)
+            let dy = 0; // Y ekseni yön
+            let score = 0;
+            let highScore = localStorage.getItem('snakeHighScore') || 0;
+            let gameInterval;
+            let isGameOver = false;
+            let lastDirection = 'RIGHT'; // Son yön
+            
+            // Canvas boyutunu ayarla
+            function resizeCanvas() {
+                canvas.width = gameContainer.clientWidth;
+                canvas.height = gameContainer.clientHeight;
+                gameWidth = canvas.width;
+                gameHeight = canvas.height;
+                gridWidth = Math.floor(gameWidth / gridSize);
+                gridHeight = Math.floor(gameHeight / gridSize);
+            }
+            
+            // Oyunu başlat
+            function initGame() {
+                resizeCanvas();
+                
+                // Yılan başlangıç pozisyonu (ortada)
+                const startX = Math.floor(gridWidth / 2) * gridSize;
+                const startY = Math.floor(gridHeight / 2) * gridSize;
+                
+                // Yılanı oluştur (3 parça)
+                snake = [
+                    {x: startX, y: startY},
+                    {x: startX - gridSize, y: startY},
+                    {x: startX - gridSize * 2, y: startY}
+                ];
+                
+                // Elmayı oluştur
+                createApple();
+                
+                // Skoru sıfırla
+                score = 0;
+                scoreElement.textContent = score;
+                highScoreElement.textContent = highScore;
+                
+                // Yönü sıfırla
+                dx = gridSize;
+                dy = 0;
+                lastDirection = 'RIGHT';
+                
+                // Oyun bittiğini sıfırla
+                isGameOver = false;
+                gameOverScreen.style.display = 'none';
+                
+                // Oyun döngüsünü başlat
+                if (gameInterval) clearInterval(gameInterval);
+                gameInterval = setInterval(gameLoop, 120);
+            }
+            
+            // Rastgele elma oluştur
+            function createApple() {
+                apple = {
+                    x: Math.floor(Math.random() * gridWidth) * gridSize,
+                    y: Math.floor(Math.random() * gridHeight) * gridSize
+                };
+                
+                // Elmanın yılanın üzerine gelmemesini sağla
+                for (let i = 0; i < snake.length; i++) {
+                    if (apple.x === snake[i].x && apple.y === snake[i].y) {
+                        createApple();
+                        return;
+                    }
+                }
+            }
+            
+            // Yılanı ve elmayı rastgele ışınla
+            function teleportSnakeAndApple() {
+                // Işınlanma efekti için arka planı yanıp söndür
+                gameContainer.classList.add('flash');
+                
+                // Yılanın yeni pozisyonu
+                const newHeadX = Math.floor(Math.random() * gridWidth) * gridSize;
+                const newHeadY = Math.floor(Math.random() * gridHeight) * gridSize;
+                
+                // Yılan parçalarını yeni konuma göre ayarla (aynı şekilde, sadece başlangıç noktası farklı)
+                const newSnake = [];
+                
+                // Hareket yönüne göre yılanı yeniden oluştur
+                for (let i = 0; i < snake.length; i++) {
+                    if (i === 0) {
+                        newSnake.push({x: newHeadX, y: newHeadY});
+                    } else {
+                        if (lastDirection === 'RIGHT') {
+                            newSnake.push({x: newHeadX - gridSize * i, y: newHeadY});
+                        } else if (lastDirection === 'LEFT') {
+                            newSnake.push({x: newHeadX + gridSize * i, y: newHeadY});
+                        } else if (lastDirection === 'UP') {
+                            newSnake.push({x: newHeadX, y: newHeadY + gridSize * i});
+                        } else if (lastDirection === 'DOWN') {
+                            newSnake.push({x: newHeadX, y: newHeadY - gridSize * i});
+                        }
+                    }
+                }
+                
+                snake = newSnake;
+                
+                // Yeni elma oluştur
+                createApple();
+                
+                // Efekti 500ms sonra kaldır
+                setTimeout(() => {
+                    gameContainer.classList.remove('flash');
+                }, 500);
+            }
+            
+            // Oyun döngüsü
+            function gameLoop() {
+                if (isGameOver) return;
+                
+                // Ekranı temizle
+                ctx.clearRect(0, 0, gameWidth, gameHeight);
+                
+                // Yılanın başını hareket ettir
+                const head = {x: snake[0].x + dx, y: snake[0].y + dy};
+                
+                // Duvarla çarpışma kontrolü
+                if (head.x < 0 || head.x >= gameWidth || head.y < 0 || head.y >= gameHeight) {
+                    gameOver();
+                    return;
+                }
+                
+                // Kendisiyle çarpışma kontrolü
+                for (let i = 1; i < snake.length; i++) {
+                    if (head.x === snake[i].x && head.y === snake[i].y) {
+                        gameOver();
+                        return;
+                    }
+                }
+                
+                // Yılanın başını ekle
+                snake.unshift(head);
+                
+                // Elma yeme kontrolü
+                if (head.x === apple.x && head.y === apple.y) {
+                    // Skoru artır
+                    score++;
+                    scoreElement.textContent = score;
+                    
+                    // Yılanı ve elmayı ışınla
+                    teleportSnakeAndApple();
+                } else {
+                    // Elma yemediyse kuyruğu sil
+                    snake.pop();
+                }
+                
+                // Yılanı çiz
+                drawSnake();
+                
+                // Elmayı çiz
+                drawApple();
+            }
+            
+            // Yılanı çiz
+            function drawSnake() {
+                for (let i = 0; i < snake.length; i++) {
+                    // Yılanın başı için farklı renk
+                    if (i === 0) {
+                        ctx.fillStyle = '#e94560';
+                    } else {
+                        // Gövdesi için degrade renk
+                        const colorValue = 255 - (i * 5);
+                        ctx.fillStyle = `rgb(${colorValue}, ${100 + (i * 5)}, ${170 - (i * 3)})`;
+                    }
+                    
+                    ctx.fillRect(snake[i].x, snake[i].y, gridSize, gridSize);
+                    
+                    // Kenarlık ekle
+                    ctx.strokeStyle = '#0f3460';
+                    ctx.strokeRect(snake[i].x, snake[i].y, gridSize, gridSize);
+                    
+                    // Yılanın başına göz ekle
+                    if (i === 0) {
+                        // Sol göz
+                        ctx.fillStyle = '#fff';
+                        
+                        if (lastDirection === 'RIGHT') {
+                            ctx.fillRect(snake[i].x + gridSize - 6, snake[i].y + 5, 4, 4);
+                            ctx.fillRect(snake[i].x + gridSize - 6, snake[i].y + gridSize - 9, 4, 4);
+                        } else if (lastDirection === 'LEFT') {
+                            ctx.fillRect(snake[i].x + 2, snake[i].y + 5, 4, 4);
+                            ctx.fillRect(snake[i].x + 2, snake[i].y + gridSize - 9, 4, 4);
+                        } else if (lastDirection === 'UP') {
+                            ctx.fillRect(snake[i].x + 5, snake[i].y + 2, 4, 4);
+                            ctx.fillRect(snake[i].x + gridSize - 9, snake[i].y + 2, 4, 4);
+                        } else if (lastDirection === 'DOWN') {
+                            ctx.fillRect(snake[i].x + 5, snake[i].y + gridSize - 6, 4, 4);
+                            ctx.fillRect(snake[i].x + gridSize - 9, snake[i].y + gridSize - 6, 4, 4);
+                        }
+                    }
+                }
+            }
+            
+            // Elmayı çiz
+            function drawApple() {
+                // Elma gövdesi
+                ctx.fillStyle = '#ff2e4c';
+                ctx.beginPath();
+                ctx.arc(apple.x + gridSize/2, apple.y + gridSize/2, gridSize/2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Elma sapı
+                ctx.fillStyle = '#42b883';
+                ctx.fillRect(apple.x + gridSize/2 - 1, apple.y + 2, 2, 4);
+                
+                // Elma yaprağı
+                ctx.fillStyle = '#42b883';
+                ctx.beginPath();
+                ctx.moveTo(apple.x + gridSize/2, apple.y + 4);
+                ctx.lineTo(apple.x + gridSize/2 + 4, apple.y);
+                ctx.lineTo(apple.x + gridSize/2 + 6, apple.y + 3);
+                ctx.closePath();
+                ctx.fill();
+            }
+            
+            // Oyun sonu
+            function gameOver() {
+                isGameOver = true;
+                clearInterval(gameInterval);
+                
+                // En yüksek skoru güncelle
+                if (score > highScore) {
+                    highScore = score;
+                    localStorage.setItem('snakeHighScore', highScore);
+                    highScoreElement.textContent = highScore;
+                }
+                
+                // Oyun sonu ekranını göster
+                finalScoreElement.textContent = `Skor: ${score}`;
+                gameOverScreen.style.display = 'flex';
+            }
+            
+            // Klavye kontrolü
+            document.addEventListener('keydown', (e) => {
+                // Ok tuşları ve WASD
+                switch(e.key) {
+                    case 'ArrowRight':
+                    case 'd':
+                    case 'D':
+                        if (lastDirection !== 'LEFT') {
+                            dx = gridSize;
+                            dy = 0;
+                            lastDirection = 'RIGHT';
+                        }
+                        break;
+                    case 'ArrowLeft':
+                    case 'a':
+                    case 'A':
+                        if (lastDirection !== 'RIGHT') {
+                            dx = -gridSize;
+                            dy = 0;
+                            lastDirection = 'LEFT';
+                        }
+                        break;
+                    case 'ArrowUp':
+                    case 'w':
+                    case 'W':
+                        if (lastDirection !== 'DOWN') {
+                            dx = 0;
+                            dy = -gridSize;
+                            lastDirection = 'UP';
+                        }
+                        break;
+                    case 'ArrowDown':
+                    case 's':
+                    case 'S':
+                        if (lastDirection !== 'UP') {
+                            dx = 0;
+                            dy = gridSize;
+                            lastDirection = 'DOWN';
+                        }
+                        break;
+                }
+            });
+            
+            // Yeniden başlat düğmesi
+            restartBtn.addEventListener('click', initGame);
+            
+            // Pencere yeniden boyutlandırıldığında
+            window.addEventListener('resize', () => {
+                resizeCanvas();
+            });
+            
+            // Oyunu başlat
+            initGame();
+        });
+    </script>
+</body>
+</html>
